@@ -233,7 +233,7 @@ async function openArticle(articleId, index = -1, autoSummary = false) {
       await loadArticles(state.tab === "saved");
     };
     $("readerSummary").onclick = () => summarizeCurrent();
-    if (article.summary) {
+    if (article.summary && !article.summary.includes("Ghi chú:") && !article.summary.includes("Tặng sao") && !article.summary.includes("Nạp thêm")) {
       $("summaryBox").textContent = article.summary;
       $("summaryBox").classList.remove("hidden");
     }
@@ -248,11 +248,11 @@ async function summarizeCurrent() {
   if (!state.currentArticleId) return;
   const style = $("summaryStyle").value;
   $("summaryBox").classList.remove("hidden");
-  $("summaryBox").textContent = "Đang tóm tắt bằng AI...";
+  $("summaryBox").textContent = "Đang tạo bản tóm tắt sạch...";
   try {
     const res = await api(`/api/articles/${state.currentArticleId}/summarize`, {
       method: "POST",
-      body: JSON.stringify({ style, force: false }),
+      body: JSON.stringify({ style, force: true }),
     });
     $("summaryBox").textContent = res.summary;
     showToast(res.cached ? "Đã mở tóm tắt đã lưu." : "Đã tóm tắt xong.");

@@ -186,6 +186,99 @@ def request_url(url: str) -> requests.Response:
     )
 
 
+NOISE_PHRASES = [
+    "nạp thêm", "tặng sao", "hoàn thành tặng sao", "bình luận", "quay lại bài viết",
+    "tối đa:", "được quan tâm nhất", "mới nhất", "chưa có bình luận", "hãy là người đầu tiên",
+    "chia sẻ", "theo dõi", "đăng nhập", "đăng ký", "quảng cáo", "đọc tiếp",
+    "trở lại chủ đề", "dòng sự kiện", "chủ đề:", "xem thêm", "tin liên quan",
+    "back to", "sign in", "subscribe", "advertisement", "related articles", "comments"
+]
+
+ARTICLE_SELECTORS = [
+    "article .fck_detail", ".fck_detail", "article .Normal", ".Normal",
+    ".detail-content", ".detail__content", ".cms-body", ".article-body", ".article__body",
+    ".story-body", ".entry-content", ".post-content", ".main-content", "#main-detail-body",
+    "article", "main"
+]
+
+
+def normalize_text_block(text: str) -> str:
+    text = re.sub(r"[\t\r]+", " ", text or "")
+    text = re.sub(r"\u00a0", " ", text)
+    text = re.sub(r"[ ]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def is_noise_paragraph(text: str) -> bool:
+    t = normalize_text_block(text)
+    low = t.lower()
+    if len(t) < 45:
+        return True
+    if any(p in low for p in NOISE_PHRASES):
+        return True
+    # Loại các dòng menu/tag hoặc cụm rác có quá nhiều nhãn ngắn nối nhau.
+    if len(t) < 140 and sum(1 for ch in t if ch.isupper()) > max(12, len(t) * 0.35):
+        return True
+    if re.fullmatch(r"[\W\d\s]+", t):
+        return True
+    if low.count("tặng sao") >= 1 or low.count("bình luận") >= 2:
+        return True
+    return False
+
+
+def paragraph_score(paragraphs: list[str]) -> float:
+    if not paragraphs:
+        return 0
+    text = " ".join(paragraphs)
+    low = text.lower()
+    score = sum(min(len(p), 900) for p in paragraphs)
+    score += 180 * min(len(paragraphs), 12)
+    score -= 900 * sum(low.count(x) for x in NOISE_PHRASES)
+    # Ưu tiên đoạn báo thật có nhiều câu hoàn chỉnh.
+    score += 80 * len(re.findall(r"[.!?。！？]", text))
+    return score
+
+
+def extract_clean_paragraphs_from_node(node) -> list[str]:
+    # Ưu tiên paragraph/list item thay vì lấy toàn bộ node, vì toàn bộ node thường dính comment, menu, nút sao.
+    raw = []
+    for child in node.find_all(["p", "li"], recursive=True):
+        txt = child.get_text(" ", strip=True)
+        txt = normalize_text_block(txt)
+        if txt and not is_noise_paragraph(txt):
+            raw.append(txt)
+    if not raw:
+        txt = normalize_text_block(node.get_text("\n", strip=True))
+        raw = [x.strip() for x in re.split(r"\n+", txt) if not is_noise_paragraph(x.strip())]
+
+    cleaned = []
+    seen = set()
+    for x in raw:
+        x = re.sub(r"\s+", " ", x).strip()
+        # Cắt bỏ các đuôi UI thường dính vào paragraph cuối.
+        x = re.split(r"(?:Nạp thêm|Tặng sao|Quay lại bài viết|Bình luận\s*\(|Được quan tâm nhất|Mới nhất|Tin liên quan)", x, flags=re.IGNORECASE)[0].strip()
+        if not x or is_noise_paragraph(x):
+            continue
+        key = re.sub(r"\W+", "", x.lower())[:160]
+        if key not in seen:
+            cleaned.append(x)
+            seen.add(key)
+    return cleaned
+
+
+def content_is_noisy(text: str) -> bool:
+    low = (text or "").lower()
+    if not text or len(text.strip()) < 200:
+        return True
+    noise_hits = sum(low.count(x) for x in NOISE_PHRASES)
+    if noise_hits >= 3:
+        return True
+    if "nạp thêm" in low or "tặng sao" in low or "hoàn thành tặng sao" in low:
+        return True
+    return False
+
+
 def extract_article(url: str) -> dict[str, str]:
     try:
         res = request_url(url)
@@ -198,37 +291,44 @@ def extract_article(url: str) -> dict[str, str]:
         tag.decompose()
 
     title = ""
-    if soup.find("meta", property="og:title"):
-        title = soup.find("meta", property="og:title").get("content", "").strip()
+    og_title = soup.find("meta", property="og:title") or soup.find("meta", attrs={"name": "twitter:title"})
+    if og_title:
+        title = og_title.get("content", "").strip()
     if not title and soup.title:
         title = soup.title.get_text(" ", strip=True)
 
     image = ""
-    if soup.find("meta", property="og:image"):
-        image = soup.find("meta", property="og:image").get("content", "").strip()
+    og_image = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "twitter:image"})
+    if og_image:
+        image = og_image.get("content", "").strip()
 
-    candidates = []
-    selectors = [
-        "article", "main", ".article", ".article-content", ".detail-content", ".content-detail",
-        ".story-body", ".entry-content", ".post-content", "#main-content", "#content"
-    ]
-    for sel in selectors:
+    meta_desc = ""
+    md = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", property="og:description")
+    if md:
+        meta_desc = normalize_text_block(md.get("content", ""))
+
+    best_paragraphs = []
+    best_score = 0
+    for sel in ARTICLE_SELECTORS:
         for node in soup.select(sel):
-            text = node.get_text("\n", strip=True)
-            if len(text) > 500:
-                candidates.append(text)
+            ps = extract_clean_paragraphs_from_node(node)
+            score = paragraph_score(ps)
+            if score > best_score:
+                best_paragraphs = ps
+                best_score = score
 
-    if candidates:
-        text = max(candidates, key=len)
-    else:
-        paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p")]
-        paragraphs = [p for p in paragraphs if len(p) > 30]
-        text = "\n\n".join(paragraphs)
+    if not best_paragraphs:
+        best_paragraphs = extract_clean_paragraphs_from_node(soup)
 
-    text = re.sub(r"\n{3,}", "\n\n", text).strip()
-    text = text[:MAX_ARTICLE_CHARS]
+    # Nếu meta description là lead tốt và chưa có trong bài, đưa lên đầu.
+    if meta_desc and len(meta_desc) > 50 and not is_noise_paragraph(meta_desc):
+        joined_low = " ".join(best_paragraphs[:2]).lower()
+        if meta_desc.lower()[:80] not in joined_low:
+            best_paragraphs.insert(0, meta_desc)
+
+    text = "\n\n".join(best_paragraphs)
+    text = normalize_text_block(text)[:MAX_ARTICLE_CHARS]
     return {"title": title, "image_url": image, "content": text}
-
 
 def fetch_source(source: sqlite3.Row) -> dict[str, Any]:
     src = row_to_dict(source)
@@ -462,7 +562,7 @@ def get_article(article_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài báo")
     article = row_to_dict(row)
-    if not article.get("content"):
+    if (not article.get("content")) or content_is_noisy(article.get("content", "")):
         data = extract_article(article["url"])
         content = data.get("content", "")
         if data.get("image_url") and not article.get("image_url"):
@@ -471,10 +571,12 @@ def get_article(article_id: int):
             article["title"] = data["title"]
         with db() as conn:
             conn.execute(
-                "UPDATE articles SET content=?, content_fetched_at=?, image_url=COALESCE(NULLIF(?, ''), image_url), title=COALESCE(NULLIF(?, ''), title) WHERE id=?",
+                "UPDATE articles SET content=?, content_fetched_at=?, image_url=COALESCE(NULLIF(?, ''), image_url), title=COALESCE(NULLIF(?, ''), title), summary='', summary_model='', summary_at=NULL WHERE id=?",
                 (content, now_iso(), article.get("image_url", ""), article.get("title", ""), article_id),
             )
         article["content"] = content
+        article["summary"] = ""
+        article["summary_model"] = ""
         article["content_fetched_at"] = now_iso()
     return article
 
@@ -504,27 +606,31 @@ def mark_hidden(article_id: int, is_hidden: bool = True):
 
 
 
+SUMMARY_MODEL_VERSION = "local-clean-v2"
+
+
 def split_sentences(text: str) -> list[str]:
-    text = re.sub(r"\s+", " ", (text or "")).strip()
+    text = normalize_text_block(text)
     if not text:
         return []
-    # Tách câu theo dấu kết thúc phổ biến, giữ được tiếng Việt/Anh/Trung tương đối ổn.
-    parts = re.split(r"(?<=[.!?。！？])\s+|\n+", text)
+    # Tách theo câu, nhưng vẫn giữ các bài tiếng Việt/Anh/Trung tương đối ổn.
+    raw = re.split(r"(?<=[.!?。！？])\s+|\n+", text)
     cleaned = []
-    for p in parts:
-        p = p.strip()
-        if len(p) >= 35:
+    for p in raw:
+        p = normalize_text_block(p)
+        if not p or is_noise_paragraph(p):
+            continue
+        if 50 <= len(p) <= 520:
             cleaned.append(p)
-    # Nếu bài không có dấu câu rõ, cắt theo đoạn ngắn.
-    if len(cleaned) < 3:
-        chunks = re.split(r"\n{2,}|\r\n\r\n", text)
-        cleaned = [c.strip() for c in chunks if len(c.strip()) >= 35]
-    return cleaned[:120]
+        elif len(p) > 520:
+            # Đoạn quá dài thường là nhiều câu dính nhau; cắt mềm theo dấu chấm/phẩy.
+            pieces = re.split(r"(?<=[.;:。！？])\s+", p)
+            cleaned.extend([x.strip() for x in pieces if 50 <= len(x.strip()) <= 520 and not is_noise_paragraph(x.strip())])
+    return cleaned[:100]
 
 
 def tokenize_for_score(text: str) -> list[str]:
     text = (text or "").lower()
-    # Giữ chữ có dấu tiếng Việt, chữ Latin, số. Với tiếng Trung/Nhật/Hàn, fallback xử lý từng cụm ký tự.
     latin = re.findall(r"[a-zà-ỹ0-9]{2,}", text, flags=re.IGNORECASE)
     cjk = re.findall(r"[\u4e00-\u9fff]{1,}", text)
     tokens = latin[:]
@@ -532,111 +638,142 @@ def tokenize_for_score(text: str) -> list[str]:
         tokens.extend([block[i:i+2] for i in range(max(0, len(block)-1))])
     stop = {
         'và','của','cho','các','một','những','được','trong','khi','với','này','đã','là','có','theo','từ','về','tại','sau','trên','năm','ngày',
-        'the','and','for','that','with','from','this','have','has','was','were','are','but','not','you','they','their','about','after','into','over','said'
+        'rằng','thì','như','đó','đây','vào','ra','bị','cũng','đến','nếu','hay','nhiều','ông','bà','anh','chị','theo','thêm','không',
+        'the','and','for','that','with','from','this','have','has','was','were','are','but','not','you','they','their','about','after','into','over','said','will','would','could','there','which'
     }
     return [t for t in tokens if t not in stop and len(t) > 1]
 
 
-def extractive_summary(article: dict[str, Any], style: str = "normal") -> str:
-    """Tóm tắt miễn phí bằng thuật toán trích xuất câu quan trọng, không gọi API ngoài."""
-    title = article.get("title", "") or ""
-    source = article.get("source_name", "") or ""
-    description = article.get("description", "") or ""
-    content = article.get("content", "") or description
-    text = f"{description}\n\n{content}".strip()
+def sentence_score(sent: str, idx: int, freq: dict[str, int], title_tokens: set[str]) -> float:
+    stoks = tokenize_for_score(sent)
+    if not stoks:
+        return -999
+    score = sum(min(freq.get(t, 0), 8) for t in stoks) / max(10, len(stoks))
+    score += max(0, 3.0 - idx * 0.18)  # lead thường quan trọng nhất trong báo
+    score += 1.2 * len(title_tokens.intersection(stoks))
+    if re.search(r"\d", sent):
+        score += 0.45
+    if re.search(r"[A-ZÀ-Ỹ][a-zà-ỹ]+\s+[A-ZÀ-Ỹ][a-zà-ỹ]+", sent):
+        score += 0.25
+    if 90 <= len(sent) <= 360:
+        score += 0.7
+    if len(sent) > 430:
+        score -= 0.9
+    low = sent.lower()
+    score -= 4.0 * sum(low.count(x) for x in NOISE_PHRASES)
+    return score
+
+
+def pick_important_sentences(title: str, text: str, count: int = 5) -> list[str]:
     sentences = split_sentences(text)
     if not sentences:
-        return "Không có đủ nội dung để tóm tắt. Anh có thể bấm mở bài gốc để đọc trực tiếp."
-
-    # Tần suất từ khóa toàn bài
+        return []
     tokens = tokenize_for_score(text)
     freq: dict[str, int] = {}
     for t in tokens:
         freq[t] = freq.get(t, 0) + 1
     title_tokens = set(tokenize_for_score(title))
+    scored = [(sentence_score(s, i, freq, title_tokens), i, s) for i, s in enumerate(sentences)]
+    scored = [x for x in scored if x[0] > -100]
+    picked = sorted(scored, reverse=True)[:count]
+    picked = [s for _, _, s in sorted(picked, key=lambda x: x[1])]
 
-    scored: list[tuple[float, int, str]] = []
-    for idx, sent in enumerate(sentences):
-        stoks = tokenize_for_score(sent)
-        if not stoks:
-            continue
-        # Điểm theo tần suất từ khóa + ưu tiên câu gần đầu + câu có số liệu/tên riêng + khớp tiêu đề
-        score = sum(freq.get(t, 0) for t in stoks) / max(8, len(stoks))
-        score += max(0, 2.5 - idx * 0.12)
-        score += 0.8 * len(title_tokens.intersection(stoks))
-        if re.search(r"\d", sent):
-            score += 0.8
-        if re.search(r"[A-ZÀ-Ỹ][a-zà-ỹ]+\s+[A-ZÀ-Ỹ][a-zà-ỹ]+", sent):
-            score += 0.4
-        if 60 <= len(sent) <= 280:
-            score += 0.5
-        scored.append((score, idx, sent))
-
-    if not scored:
-        picked = sentences[:5]
-    else:
-        top_n = 6 if style in {"5w1h", "language_learning"} else 5
-        picked_idx = sorted(scored, reverse=True)[:top_n]
-        picked = [s for _, _, s in sorted(picked_idx, key=lambda x: x[1])]
-
-    # Loại trùng gần đúng
     final = []
     seen = set()
     for sent in picked:
-        key = re.sub(r"\W+", "", sent.lower())[:120]
-        if key and key not in seen:
+        sent = normalize_text_block(sent)
+        key = re.sub(r"\W+", "", sent.lower())[:150]
+        if key and key not in seen and not is_noise_paragraph(sent):
             final.append(sent)
             seen.add(key)
+    return final
 
-    bullets = "\n".join(f"- {s}" for s in final)
+
+def make_readable_summary(title: str, source: str, points: list[str], style: str) -> str:
+    if not points:
+        return "Không lấy được đủ nội dung sạch để tóm tắt. Anh nên mở bài gốc để đọc trực tiếp."
+
+    # Không ghi lộ thuật toán/miễn phí trong phần người dùng đọc.
+    intro = f"Tóm tắt nhanh — {source}" if source else "Tóm tắt nhanh"
+    lines = [intro]
+    if title:
+        lines.append(f"Bài viết: {title}")
+    lines.append("")
 
     if style == "5w1h":
-        numbers = re.findall(r"[^.?!。！？]{0,45}\d[^.?!。！？]{0,45}", text)
-        nums = "\n".join(f"- {n.strip()}" for n in numbers[:5]) or "- Chưa phát hiện số liệu nổi bật trong nội dung lấy được."
-        return (
-            f"TÓM TẮT NHANH — {source}\n"
-            f"Tiêu đề: {title}\n\n"
-            f"Ý chính:\n{bullets}\n\n"
-            f"Số liệu / mốc thời gian đáng chú ý:\n{nums}\n\n"
-            "Ghi chú: Đây là tóm tắt nội bộ bằng thuật toán trích xuất câu quan trọng, không phải AI suy luận."
-        ).strip()
+        lines.append("Các ý chính cần nắm:")
+    elif style == "language_learning":
+        lines.append("Nội dung chính:")
+    else:
+        lines.append("Nội dung chính:")
+
+    # Viết thành các gạch đầu dòng sạch, có liên từ mở đầu nhẹ để đọc đỡ rời rạc.
+    connectors = ["Trước hết", "Đồng thời", "Điểm đáng chú ý là", "Bên cạnh đó", "Cuối cùng"]
+    for i, p in enumerate(points[:5]):
+        prefix = connectors[i] if i < len(connectors) else "Ngoài ra"
+        # Không ép biến câu thành văn AI; chỉ nối bằng cụm dẫn để dễ đọc hơn.
+        if len(p) < 120:
+            lines.append(f"- {prefix}, {p[0].lower() + p[1:] if len(p) > 1 else p}")
+        else:
+            lines.append(f"- {prefix}, {p}")
+
+    if style == "5w1h":
+        joined = " ".join(points)
+        nums = re.findall(r"[^.?!。！？]{0,45}\d[^.?!。！？]{0,45}", joined)
+        nums = [normalize_text_block(x) for x in nums if not is_noise_paragraph(x)]
+        if nums:
+            lines.append("")
+            lines.append("Số liệu/mốc thời gian nổi bật:")
+            for n in nums[:4]:
+                lines.append(f"- {n}")
 
     if style == "language_learning":
-        common = sorted(freq.items(), key=lambda x: x[1], reverse=True)
-        vocab = []
-        for word, count in common:
-            if word in title_tokens or count >= 2:
-                vocab.append(word)
-            if len(vocab) >= 10:
-                break
-        vocab_text = "\n".join(f"- {w}" for w in vocab) or "- Chưa trích được cụm từ nổi bật."
-        return (
-            f"TÓM TẮT NHANH — {source}\n"
-            f"Tiêu đề: {title}\n\n"
-            f"Ý chính:\n{bullets}\n\n"
-            f"Từ/cụm từ xuất hiện nổi bật để học ngoại ngữ:\n{vocab_text}\n\n"
-            "Ghi chú: Thuật toán giữ nguyên ngôn ngữ bài báo, không dịch tự động."
-        ).strip()
+        toks = tokenize_for_score(" ".join(points))
+        freq: dict[str, int] = {}
+        for t in toks:
+            freq[t] = freq.get(t, 0) + 1
+        vocab = [w for w, c in sorted(freq.items(), key=lambda x: (-x[1], x[0])) if len(w) >= 4][:10]
+        if vocab:
+            lines.append("")
+            lines.append("Từ/cụm từ nổi bật trong bài:")
+            for w in vocab:
+                lines.append(f"- {w}")
 
-    return (
-        f"TÓM TẮT NHANH — {source}\n"
-        f"Tiêu đề: {title}\n\n"
-        f"Ý chính:\n{bullets}\n\n"
-        "Ghi chú: Đây là tóm tắt nội bộ miễn phí bằng thuật toán, không gọi OpenAI/Groq/Gemini."
-    ).strip()
+    return "\n".join(lines).strip()
+
+
+def extractive_summary(article: dict[str, Any], style: str = "normal") -> str:
+    title = article.get("title", "") or ""
+    source = article.get("source_name", "") or ""
+    description = article.get("description", "") or ""
+    content = article.get("content", "") or description
+    text = normalize_text_block(f"{description}\n\n{content}")
+    # Phòng trường hợp nội dung cũ còn dính rác từ bản trước.
+    text = re.split(r"(?:Nạp thêm|Tặng sao|Hoàn thành Tặng sao|Quay lại bài viết|Bình luận\s*\(|Được quan tâm nhất)", text, flags=re.IGNORECASE)[0]
+    points = pick_important_sentences(title, text, count=6 if style in {"5w1h", "language_learning"} else 5)
+    return make_readable_summary(title, source, points, style)
 
 @app.post("/api/articles/{article_id}/summarize")
 def summarize_article(article_id: int, payload: SummarizeIn):
     article = get_article(article_id)
-    if article.get("summary") and article.get("summary_style") == payload.style and not payload.force:
-        return {"article_id": article_id, "summary": article["summary"], "cached": True, "style": payload.style}
+    cached_summary = article.get("summary") or ""
+    cached_ok = (
+        cached_summary
+        and article.get("summary_style") == payload.style
+        and article.get("summary_model") == SUMMARY_MODEL_VERSION
+        and "Ghi chú:" not in cached_summary
+        and "Tặng sao" not in cached_summary
+        and "Nạp thêm" not in cached_summary
+    )
+    if cached_ok and not payload.force:
+        return {"article_id": article_id, "summary": cached_summary, "cached": True, "style": payload.style}
     if not article.get("content"):
         raise HTTPException(status_code=422, detail="Không có nội dung bài để tóm tắt")
     summary = extractive_summary(article, payload.style)
     with db() as conn:
         conn.execute(
             "UPDATE articles SET summary=?, summary_style=?, summary_model=?, summary_at=? WHERE id=?",
-            (summary, payload.style, "local-extractive", now_iso(), article_id),
+            (summary, payload.style, SUMMARY_MODEL_VERSION, now_iso(), article_id),
         )
     return {"article_id": article_id, "summary": summary, "cached": False, "style": payload.style}
 

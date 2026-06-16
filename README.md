@@ -1,154 +1,82 @@
 # News Radar Pro
 
-App đọc báo mobile-first: quản lý nguồn RSS, lướt tin, phân trang tự cuộn lên đầu, lưu bài, đánh dấu đã đọc, đọc nội dung gốc và tóm tắt AI theo từng bài được chọn.
+App đọc báo mobile-first: quản lý nguồn RSS, lướt tin, phân trang tự cuộn lên đầu, lưu bài, đánh dấu đã đọc, đọc nội dung gốc và tóm tắt từng bài được chọn. Bản này dùng tóm tắt nội bộ bằng thuật toán, không cần OpenAI API key.
 
-## 1. Cấu trúc
+## Điểm mới bản clean summary
+
+- Bỏ toàn bộ dòng ghi chú kiểu “tóm tắt nội bộ miễn phí bằng thuật toán”.
+- Lọc rác giao diện web như bình luận, tặng sao, nạp thêm, tin liên quan, chủ đề, dòng sự kiện.
+- Khi gặp nội dung cũ bị dính rác, backend tự lấy lại nội dung sạch hơn.
+- Tóm tắt lại luôn bằng phiên bản thuật toán mới, không dùng cache cũ bị lỗi.
+- Frontend không còn hiển thị “Đang tóm tắt bằng AI”.
+
+## Deploy backend lên Render Free
+
+Root Directory:
 
 ```text
-news-radar-pro/
-  backend/              # FastAPI chạy trên Render hoặc máy local
-    main.py
-    fetch_once.py
-    requirements.txt
-    .env.example
-  docs/                 # Frontend tĩnh chạy GitHub Pages
-    index.html
-    app.js
-    styles.css
-    config.js
-    manifest.json
-    sw.js
-  render.yaml           # Blueprint tham khảo cho Render
+backend
 ```
 
-## 2. Chạy local trên máy tính
-
-### Backend
+Build Command:
 
 ```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate       # Windows
 pip install -r requirements.txt
-copy .env.example .env
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Mở kiểm tra:
-
-```text
-http://localhost:8000/health
-http://localhost:8000/docs
-```
-
-### Frontend
-
-Mở file:
-
-```text
-docs/index.html
-```
-
-Hoặc chạy server tĩnh:
+Start Command:
 
 ```bash
-cd docs
-python -m http.server 5500
+python -m uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-Sau đó mở:
-
-```text
-http://localhost:5500
-```
-
-## 3. Cấu hình AI tóm tắt
-
-Trong `backend/.env`, điền:
+Environment Variables:
 
 ```env
+PYTHON_VERSION=3.12.11
+DB_PATH=/tmp/news.db
+CORS_ORIGINS=*
 SUMMARY_ENGINE=local
-OPENAI_MODEL=gpt-4o-mini
 ```
 
-Không điền API key thì app vẫn chạy, nhưng nút tóm tắt chỉ trả về bản xem nhanh nội dung, chưa gọi AI thật.
+Không cần:
 
-## 4. Deploy backend lên Render
+```env
+OPENAI_API_KEY
+OPENAI_MODEL
+```
 
-Cách nhanh:
+Lưu ý: Render Free không có Persistent Disk. Vì vậy `/tmp/news.db` là database tạm, có thể mất dữ liệu khi redeploy/restart. Dùng để chạy thử là ổn. Khi cần lưu bền, chuyển sang Render paid disk hoặc PostgreSQL/Supabase/Neon.
 
-1. Đẩy toàn bộ thư mục này lên GitHub.
-2. Vào Render → New → Web Service.
-3. Chọn repo.
-4. Root Directory: `backend`.
-5. Build Command: `pip install -r requirements.txt`.
-6. Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`.
-7. Environment Variables:
-   - `DB_PATH=/var/data/news.db`
-   - `CORS_ORIGINS=*`
-   - `SUMMARY_ENGINE=local`
-   - `OPENAI_MODEL=gpt-4o-mini`
-8. Nên gắn Persistent Disk vào `/var/data` để SQLite không mất dữ liệu khi service rebuild/restart.
+## Deploy frontend lên GitHub Pages
 
-Sau khi deploy, Render sẽ cho link dạng:
+Sửa file:
 
 ```text
-https://ten-service-cua-anh.onrender.com
+docs/config.js
 ```
 
-## 5. Deploy frontend lên GitHub Pages
-
-1. File frontend nằm trong thư mục `docs/`.
-2. Sửa `docs/config.js`:
+Đổi thành link backend Render của anh:
 
 ```js
 window.NEWS_RADAR_API_BASE = "https://ten-service-cua-anh.onrender.com";
 ```
 
-3. Push lên GitHub.
-4. Vào repo → Settings → Pages.
-5. Source: Deploy from branch.
-6. Branch: `main`, Folder: `/docs`.
-7. Mở link GitHub Pages trên iPhone.
-8. iPhone Safari → Share → Add to Home Screen để dùng như app.
-
-## 6. Tự động quét tin định kỳ
-
-Cách 1: Dùng Render Cron Job, command:
-
-```bash
-python fetch_once.py
-```
-
-Lịch gợi ý:
+GitHub Pages:
 
 ```text
-*/30 * * * *
+Settings → Pages → Deploy from a branch → main → /docs
 ```
 
-Nghĩa là mỗi 30 phút quét một lần.
+## Cách dùng
 
-Cách 2: Không dùng Cron, mở app rồi bấm nút `↻` để quét thủ công.
+1. Mở link GitHub Pages trên điện thoại.
+2. Vào tab Nguồn để kiểm tra nguồn RSS.
+3. Bấm nút làm mới/quét tin.
+4. Vào Tin mới để lướt tiêu đề.
+5. Bấm Đọc hoặc Tóm tắt khi gặp tin đáng quan tâm.
+6. Bấm Bài sau/Bài trước để đọc tiếp, app sẽ tự cuộn lên đầu.
 
-## 7. Nguồn báo
+## Ghi chú kỹ thuật
 
-App có sẵn vài RSS mẫu. Anh có thể thêm nguồn bằng màn hình `Nguồn báo`.
-
-Gợi ý cấu trúc nhập:
-
-- Tên nguồn: `BBC World`
-- RSS URL: `https://feeds.bbci.co.uk/news/world/rss.xml`
-- Nhóm: `World`
-- Ngôn ngữ: `en`
-
-## 8. Lưu ý vận hành
-
-- Không phải báo nào cũng cho RSS đầy đủ.
-- Một số báo chỉ cho tiêu đề/mô tả, khi bấm đọc app mới cố lấy nội dung bài.
-- Một số trang chặn bot hoặc tải bằng JavaScript nặng có thể lấy thiếu nội dung.
-- Muốn giảm miss tin thì nên ưu tiên RSS chính thức, quét định kỳ, và giữ lịch sử 7–30 ngày.
-- Tóm tắt AI chỉ chạy khi anh bấm tóm tắt từng bài, giúp tiết kiệm chi phí.
-
-
-## Bản local summary
-Bản này dùng tóm tắt nội bộ bằng thuật toán trích xuất câu quan trọng. Không cần OPENAI_API_KEY và không tốn tiền AI. Chất lượng phù hợp để đọc lướt/lọc tin, nhưng không suy luận sâu như AI thật.
+Thuật toán tóm tắt là extractive summarization: lọc nội dung sạch, chấm điểm câu theo vị trí đầu bài, độ khớp tiêu đề, từ khóa lặp lại, số liệu, tên riêng, rồi trình bày lại thành gạch đầu dòng có liên từ. Không suy luận sâu như AI thật, nhưng miễn phí và đủ dùng để lướt tin.
