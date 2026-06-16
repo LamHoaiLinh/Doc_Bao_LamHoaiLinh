@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827" />
   <title>News Radar Pro</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=40" />
 </head>
 <body>
   <div id="appShell" class="app-shell">
@@ -50,13 +50,22 @@
 
       <section id="sources" class="panel">
         <div class="section-title">Thư viện nguồn báo</div>
+        <div id="sourceSyncStatus" class="note-box">Đang kiểm tra trạng thái lưu nguồn...</div>
         <form id="sourceForm" class="source-form">
           <input id="sourceName" class="input" placeholder="Tên nguồn, ví dụ: Reuters World" required />
           <input id="sourceUrl" class="input" placeholder="RSS URL hoặc feed URL" required />
           <input id="sourceCategory" class="input" placeholder="Nhóm: Việt Nam / World / AI / Finance" />
           <input id="sourceLanguage" class="input" placeholder="Ngôn ngữ: vi / en / zh / ja..." />
-          <button class="btn" type="submit">Thêm nguồn</button>
+          <input id="sourcePriority" class="input" type="number" min="1" max="9999" value="5" placeholder="Thứ tự ưu tiên: số càng cao càng lên trên" />
+          <div class="form-actions">
+            <button id="sourceSubmit" class="btn" type="submit">Thêm nguồn</button>
+            <button id="sourceCancel" class="btn secondary hidden" type="button">Hủy sửa</button>
+          </div>
         </form>
+        <div class="source-toolbar">
+          <button id="syncFromGithub" class="btn secondary" type="button">Nạp nguồn từ GitHub</button>
+          <button id="saveSourcesGithub" class="btn secondary" type="button">Lưu nguồn vào GitHub</button>
+        </div>
         <div id="sourceList" class="source-list"></div>
       </section>
 
@@ -126,7 +135,7 @@
   </aside>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="config.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="config.js?v=40"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>

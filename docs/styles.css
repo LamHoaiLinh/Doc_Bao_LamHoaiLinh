@@ -79,3 +79,7 @@ body.image-hide .card-image{display:none}
 .toast{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:100;background:#111827;color:white;border-radius:18px;padding:12px 14px;box-shadow:0 18px 50px rgba(0,0,0,.28);font-weight:750}.toast.hidden{display:none}
 @media(min-width:680px){.toolbar{grid-template-columns:1fr 220px 130px}.settings-grid{grid-template-columns:repeat(2,1fr)}.source-form{grid-template-columns:1fr 1fr}.source-form .btn{grid-column:1/-1}.sticky-toolbar{top:134px}.card-title{font-size:20px}}
 @media(prefers-color-scheme:dark){:root{--bg:#0b1020;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--shadow:0 18px 45px rgba(0,0,0,.22)}}
+.form-actions{display:flex;gap:10px;flex-wrap:wrap}
+.source-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hidden{display:none!important}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-16T00:00:00+00:00",
+  "note": "Nguồn RSS mặc định. App sẽ tự cập nhật file này trên GitHub nếu GITHUB_TOKEN được cấu hình trong Render.",
+  "sources": [
+    {"name":"VnExpress - Tin mới","url":"https://vnexpress.net/rss/tin-moi-nhat.rss","category":"Việt Nam","language":"vi","enabled":true,"priority":100},
+    {"name":"VnExpress - Thời sự","url":"https://vnexpress.net/rss/thoi-su.rss","category":"Việt Nam","language":"vi","enabled":true,"priority":95},
+    {"name":"VnExpress - Thế giới","url":"https://vnexpress.net/rss/the-gioi.rss","category":"Thế giới","language":"vi","enabled":true,"priority":94},
+    {"name":"VnExpress - Kinh doanh","url":"https://vnexpress.net/rss/kinh-doanh.rss","category":"Kinh tế","language":"vi","enabled":true,"priority":93},
+    {"name":"Tuổi Trẻ - Tin mới","url":"https://tuoitre.vn/rss/tin-moi-nhat.rss","category":"Việt Nam","language":"vi","enabled":true,"priority":90},
+    {"name":"Thanh Niên - Trang chủ","url":"https://thanhnien.vn/rss/home.rss","category":"Việt Nam","language":"vi","enabled":true,"priority":85},
+    {"name":"Dân Trí - Xã hội","url":"https://dantri.com.vn/rss/xa-hoi.rss","category":"Việt Nam","language":"vi","enabled":true,"priority":80},
+    {"name":"BBC - World","url":"https://feeds.bbci.co.uk/news/world/rss.xml","category":"World","language":"en","enabled":true,"priority":75},
+    {"name":"The Guardian - World","url":"https://www.theguardian.com/world/rss","category":"World","language":"en","enabled":true,"priority":70},
+    {"name":"NYTimes - World","url":"https://rss.nytimes.com/services/xml/rss/nyt/World.xml","category":"World","language":"en","enabled":true,"priority":65}
+  ]
+}

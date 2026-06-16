@@ -10,6 +10,8 @@ const state = {
   currentArticleId: null,
   currentArticleIndex: -1,
   settings: loadSettings(),
+  editingSourceId: null,
+  sourceSyncStatus: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -101,8 +103,26 @@ function applySettings() {
 
 async function loadSources() {
   state.sources = await api("/api/sources");
+  try { state.sourceSyncStatus = await api("/api/source-sync-status"); } catch { state.sourceSyncStatus = null; }
   renderSourceFilter();
   renderSources();
+  renderSourceSyncStatus();
+}
+
+function renderSourceSyncStatus(extra = "") {
+  const el = $("sourceSyncStatus");
+  if (!el) return;
+  const s = state.sourceSyncStatus;
+  const base = s && s.github_sync_enabled
+    ? `Đang lưu thư viện nguồn vào GitHub: ${escapeHtml(s.owner)}/${escapeHtml(s.repo)} → ${escapeHtml(s.path)}`
+    : `Chưa bật lưu nguồn vào GitHub. Nguồn thêm mới chỉ nằm tạm trong database Render.`;
+  el.innerHTML = `${base}${extra ? `<br>${escapeHtml(extra)}` : ""}`;
+}
+
+function sourceSyncMessage(res) {
+  const sync = res && res.github_sync;
+  if (!sync) return "";
+  return sync.message || (sync.synced ? "Đã lưu vào GitHub" : "Chưa lưu được vào GitHub");
 }
 
 function renderSourceFilter() {
@@ -174,22 +194,61 @@ function renderSources() {
     box.innerHTML = `<div class="note-box">Chưa có nguồn báo.</div>`;
     return;
   }
-  box.innerHTML = state.sources.map(s => `<div class="source-item">
+  box.innerHTML = state.sources.map((s, idx) => `<div class="source-item">
     <div class="source-head">
       <div>
-        <div class="source-name">${escapeHtml(s.name)}</div>
+        <div class="source-name">${idx + 1}. ${escapeHtml(s.name)}</div>
         <div class="source-url">${escapeHtml(s.url)}</div>
-        <div class="source-tags">${escapeHtml(s.category || "Chưa phân nhóm")} • ${escapeHtml(s.language || "ngôn ngữ chưa đặt")} • ${s.enabled ? "Đang bật" : "Đang tắt"}</div>
+        <div class="source-tags">${escapeHtml(s.category || "Chưa phân nhóm")} • ${escapeHtml(s.language || "ngôn ngữ chưa đặt")} • Ưu tiên ${s.priority ?? 0} • ${s.enabled ? "Đang bật" : "Đang tắt"}</div>
         <div class="source-tags">Lần quét: ${s.last_fetch ? fmtDate(s.last_fetch) : "chưa có"} ${s.last_status ? "• " + escapeHtml(s.last_status) : ""}</div>
         ${s.last_error ? `<div class="source-tags">Lỗi: ${escapeHtml(s.last_error)}</div>` : ""}
       </div>
     </div>
     <div class="source-actions">
+      <button class="btn secondary" data-source-action="up" data-id="${s.id}" ${idx === 0 ? "disabled" : ""}>↑ Lên</button>
+      <button class="btn secondary" data-source-action="down" data-id="${s.id}" ${idx === state.sources.length - 1 ? "disabled" : ""}>↓ Xuống</button>
+      <button class="btn secondary" data-source-action="edit" data-id="${s.id}">Sửa</button>
       <button class="btn secondary" data-source-action="toggle" data-id="${s.id}">${s.enabled ? "Tắt" : "Bật"}</button>
       <button class="btn danger" data-source-action="delete" data-id="${s.id}">Xóa</button>
     </div>
   </div>`).join("");
 }
+
+function resetSourceForm() {
+  state.editingSourceId = null;
+  $("sourceForm").reset();
+  $("sourcePriority").value = 5;
+  $("sourceSubmit").textContent = "Thêm nguồn";
+  $("sourceCancel").classList.add("hidden");
+}
+
+function fillSourceForm(source) {
+  state.editingSourceId = source.id;
+  $("sourceName").value = source.name || "";
+  $("sourceUrl").value = source.url || "";
+  $("sourceCategory").value = source.category || "";
+  $("sourceLanguage").value = source.language || "";
+  $("sourcePriority").value = source.priority ?? 5;
+  $("sourceSubmit").textContent = "Lưu thay đổi";
+  $("sourceCancel").classList.remove("hidden");
+  $("sourceName").focus();
+  scrollTopSmooth();
+}
+
+async function reorderSource(id, delta) {
+  const idx = state.sources.findIndex(s => s.id === id);
+  const newIdx = idx + delta;
+  if (idx < 0 || newIdx < 0 || newIdx >= state.sources.length) return;
+  const ids = state.sources.map(s => s.id);
+  [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
+  const res = await api("/api/sources/reorder", { method: "POST", body: JSON.stringify({ ids }) });
+  state.sources = res.items || state.sources;
+  renderSourceFilter();
+  renderSources();
+  renderSourceSyncStatus(sourceSyncMessage(res));
+  showToast(sourceSyncMessage(res) || "Đã sắp xếp nguồn.");
+}
+
 
 async function fetchNews() {
   $("feedStatus").textContent = "Đang quét RSS từ các nguồn báo...";
@@ -318,14 +377,20 @@ function bindEvents() {
       const id = Number(e.target.dataset.id);
       const source = state.sources.find(s => s.id === id);
       if (!source) return;
+      if (sourceAction === "edit") fillSourceForm(source);
+      if (sourceAction === "up") await reorderSource(id, -1);
+      if (sourceAction === "down") await reorderSource(id, 1);
       if (sourceAction === "toggle") {
-        await api(`/api/sources/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: !source.enabled }) });
+        const res = await api(`/api/sources/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: !source.enabled }) });
         await loadSources();
+        showToast(sourceSyncMessage(res) || "Đã cập nhật nguồn.");
       }
       if (sourceAction === "delete") {
-        if (!confirm("Xóa nguồn này? Tin đã lấy cũ vẫn còn trong kho.")) return;
-        await api(`/api/sources/${id}`, { method: "DELETE" });
+        if (!confirm("Xóa nguồn này khỏi thư viện? Tin đã lấy cũ vẫn còn trong kho tạm.")) return;
+        const res = await api(`/api/sources/${id}`, { method: "DELETE" });
         await loadSources();
+        showToast(sourceSyncMessage(res) || "Đã xóa nguồn.");
+        if (state.editingSourceId === id) resetSourceForm();
       }
     }
   });
@@ -337,14 +402,33 @@ function bindEvents() {
       url: $("sourceUrl").value.trim(),
       category: $("sourceCategory").value.trim(),
       language: $("sourceLanguage").value.trim(),
-      enabled: true,
-      priority: 5,
+      enabled: state.editingSourceId ? Boolean((state.sources.find(x => x.id === state.editingSourceId) || {}).enabled) : true,
+      priority: Number($("sourcePriority").value || 5),
     };
     try {
-      await api("/api/sources", { method: "POST", body: JSON.stringify(payload) });
-      e.target.reset();
+      const editing = state.editingSourceId;
+      const res = editing
+        ? await api(`/api/sources/${editing}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api("/api/sources", { method: "POST", body: JSON.stringify(payload) });
+      resetSourceForm();
       await loadSources();
-      showToast("Đã thêm nguồn báo.");
+      showToast(sourceSyncMessage(res) || (editing ? "Đã sửa nguồn báo." : "Đã thêm nguồn báo."));
+    } catch (err) { showToast(err.message, 5000); }
+  });
+
+  $("sourceCancel").addEventListener("click", resetSourceForm);
+  $("syncFromGithub").addEventListener("click", async () => {
+    try {
+      const res = await api("/api/sources/sync-from-github", { method: "POST" });
+      await loadSources();
+      showToast(res.message || "Đã nạp nguồn từ GitHub.");
+    } catch (err) { showToast(err.message, 5000); }
+  });
+  $("saveSourcesGithub").addEventListener("click", async () => {
+    try {
+      const res = await api("/api/sources/save-to-github", { method: "POST" });
+      await loadSources();
+      showToast(res.message || "Đã lưu nguồn vào GitHub.");
     } catch (err) { showToast(err.message, 5000); }
   });
 

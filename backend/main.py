@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 import hashlib
 import sqlite3
 import datetime as dt
@@ -24,6 +25,15 @@ ARTICLE_TIMEOUT = int(os.getenv("ARTICLE_TIMEOUT", "15"))
 MAX_ARTICLE_CHARS = int(os.getenv("MAX_ARTICLE_CHARS", "18000"))
 CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",") if x.strip()]
 
+# Optional: persist RSS source library into a JSON file in GitHub.
+# This keeps user-added sources safe even when Render Free resets /tmp/news.db.
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+GITHUB_OWNER = os.getenv("GITHUB_OWNER", "").strip()
+GITHUB_REPO = os.getenv("GITHUB_REPO", "").strip()
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main").strip()
+GITHUB_SOURCES_PATH = os.getenv("GITHUB_SOURCES_PATH", "backend/default_sources.json").strip()
+GITHUB_SYNC_ENABLED = os.getenv("GITHUB_SYNC_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
+
 USER_AGENT = os.getenv(
     "NEWS_USER_AGENT",
     "Mozilla/5.0 (compatible; NewsRadarPro/1.0; +https://github.com/)"
@@ -45,7 +55,171 @@ SEED_SOURCES = [
     {"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "category": "World", "language": "en", "priority": 8},
     {"name": "The Guardian - World", "url": "https://www.theguardian.com/world/rss", "category": "World", "language": "en", "priority": 7},
     {"name": "NYTimes - World", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "category": "World", "language": "en", "priority": 7},
-]
+ ]
+
+
+def source_public_dict(row: dict[str, Any] | sqlite3.Row) -> dict[str, Any]:
+    data = row_to_dict(row) if isinstance(row, sqlite3.Row) else dict(row)
+    return {
+        "name": str(data.get("name", "")).strip(),
+        "url": str(data.get("url", "")).strip(),
+        "category": str(data.get("category", "")).strip(),
+        "language": str(data.get("language", "")).strip(),
+        "enabled": bool(data.get("enabled", True)),
+        "priority": int(data.get("priority", 5) or 5),
+    }
+
+
+def normalize_sources_payload(payload: Any) -> list[dict[str, Any]]:
+    # Accept either [{...}] or {"sources":[...]} for future flexibility.
+    raw = payload.get("sources", []) if isinstance(payload, dict) else payload
+    sources: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return sources
+    seen = set()
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        name = str(item.get("name", "")).strip()
+        if not url or not name or url in seen:
+            continue
+        seen.add(url)
+        sources.append({
+            "name": name,
+            "url": url,
+            "category": str(item.get("category", "")).strip(),
+            "language": str(item.get("language", "")).strip(),
+            "enabled": bool(item.get("enabled", True)),
+            "priority": int(item.get("priority", max(1, 1000 - i)) or max(1, 1000 - i)),
+        })
+    return sources
+
+
+def local_sources_file() -> str:
+    return os.path.join(os.path.dirname(__file__), "default_sources.json")
+
+
+def load_sources_from_local_file() -> list[dict[str, Any]]:
+    path = local_sources_file()
+    if not os.path.exists(path):
+        return SEED_SOURCES
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return normalize_sources_payload(json.load(f)) or SEED_SOURCES
+    except Exception:
+        return SEED_SOURCES
+
+
+def github_is_configured() -> bool:
+    return bool(GITHUB_SYNC_ENABLED and GITHUB_TOKEN and GITHUB_OWNER and GITHUB_REPO and GITHUB_SOURCES_PATH)
+
+
+def github_headers() -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "NewsRadarPro-SourceSync",
+    }
+
+
+def github_contents_url() -> str:
+    return f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{GITHUB_SOURCES_PATH}"
+
+
+def load_sources_from_github() -> tuple[list[dict[str, Any]], str]:
+    if not github_is_configured():
+        return [], "GitHub sync chưa cấu hình"
+    try:
+        r = requests.get(github_contents_url(), headers=github_headers(), params={"ref": GITHUB_BRANCH}, timeout=20)
+        if r.status_code == 404:
+            return [], "Chưa có file sources trên GitHub"
+        r.raise_for_status()
+        data = r.json()
+        content = base64.b64decode(data.get("content", "")).decode("utf-8")
+        sources = normalize_sources_payload(json.loads(content))
+        return sources, f"Đã đọc {len(sources)} nguồn từ GitHub"
+    except Exception as e:
+        return [], f"Không đọc được GitHub sources: {e}"
+
+
+def upsert_sources_into_db(sources: list[dict[str, Any]], replace_existing: bool = False) -> int:
+    if not sources:
+        return 0
+    changed = 0
+    with db() as conn:
+        if replace_existing:
+            conn.execute("DELETE FROM sources")
+        for s in sources:
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO sources (name, url, category, language, enabled, priority, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(url) DO UPDATE SET
+                        name=excluded.name, category=excluded.category, language=excluded.language,
+                        enabled=excluded.enabled, priority=excluded.priority
+                    """,
+                    (s["name"], s["url"], s.get("category", ""), s.get("language", ""), int(s.get("enabled", True)), int(s.get("priority", 5)), now_iso()),
+                )
+                changed += 1
+            except Exception:
+                continue
+    return changed
+
+
+def load_source_library_into_db() -> dict[str, Any]:
+    # Priority: GitHub file > bundled default_sources.json > SEED_SOURCES.
+    gh_sources, gh_message = load_sources_from_github()
+    if gh_sources:
+        with db() as conn:
+            article_count = conn.execute("SELECT COUNT(*) AS c FROM articles").fetchone()["c"]
+        # When the temporary DB has no articles, make DB sources exactly match GitHub.
+        # When articles already exist, merge only to avoid breaking source_id joins.
+        count = upsert_sources_into_db(gh_sources, replace_existing=(article_count == 0))
+        return {"source": "github", "count": count, "message": gh_message}
+    local_sources = load_sources_from_local_file()
+    count = upsert_sources_into_db(local_sources, replace_existing=False)
+    return {"source": "local", "count": count, "message": gh_message}
+
+
+def export_sources_from_db() -> dict[str, Any]:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM sources ORDER BY priority DESC, name ASC").fetchall()
+    return {
+        "version": 1,
+        "updated_at": now_iso(),
+        "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
+        "sources": [source_public_dict(r) for r in rows],
+    }
+
+
+def save_sources_to_github(commit_message: str = "Update News Radar RSS sources") -> dict[str, Any]:
+    if not github_is_configured():
+        return {"synced": False, "message": "Chưa cấu hình GitHub sync"}
+    try:
+        current_sha = None
+        get_resp = requests.get(github_contents_url(), headers=github_headers(), params={"ref": GITHUB_BRANCH}, timeout=20)
+        if get_resp.status_code == 200:
+            current_sha = get_resp.json().get("sha")
+        elif get_resp.status_code != 404:
+            get_resp.raise_for_status()
+
+        content_json = json.dumps(export_sources_from_db(), ensure_ascii=False, indent=2) + "\n"
+        payload: dict[str, Any] = {
+            "message": commit_message,
+            "content": base64.b64encode(content_json.encode("utf-8")).decode("ascii"),
+            "branch": GITHUB_BRANCH,
+        }
+        if current_sha:
+            payload["sha"] = current_sha
+
+        put_resp = requests.put(github_contents_url(), headers=github_headers(), json=payload, timeout=30)
+        put_resp.raise_for_status()
+        return {"synced": True, "message": "Đã lưu thư viện nguồn vào GitHub", "path": GITHUB_SOURCES_PATH}
+    except Exception as e:
+        return {"synced": False, "message": f"Không lưu được vào GitHub: {e}"}
 
 
 def now_iso() -> str:
@@ -114,7 +288,9 @@ def init_db() -> None:
             """
         )
         count = conn.execute("SELECT COUNT(*) AS c FROM sources").fetchone()["c"]
-        if count == 0:
+        # If GitHub source sync is configured, startup will hydrate sources from GitHub.
+        # Otherwise seed bundled defaults so the app has usable sources immediately.
+        if count == 0 and not github_is_configured():
             for s in SEED_SOURCES:
                 conn.execute(
                     """
@@ -425,6 +601,7 @@ class SummarizeIn(BaseModel):
 @app.on_event("startup")
 def startup_event():
     init_db()
+    load_source_library_into_db()
 
 
 @app.get("/")
@@ -435,6 +612,31 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "time": now_iso()}
+
+
+@app.get("/api/source-sync-status")
+def source_sync_status():
+    return {
+        "github_sync_enabled": github_is_configured(),
+        "owner": GITHUB_OWNER,
+        "repo": GITHUB_REPO,
+        "branch": GITHUB_BRANCH,
+        "path": GITHUB_SOURCES_PATH,
+    }
+
+
+@app.post("/api/sources/sync-from-github")
+def sync_from_github():
+    init_db()
+    result = load_source_library_into_db()
+    return {"ok": True, **result}
+
+
+@app.post("/api/sources/save-to-github")
+def sync_to_github():
+    init_db()
+    result = save_sources_to_github("Save News Radar RSS sources")
+    return {"ok": result.get("synced", False), **result}
 
 
 @app.get("/api/sources")
@@ -460,7 +662,10 @@ def create_source(payload: SourceIn):
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="Nguồn này đã tồn tại")
         row = conn.execute("SELECT * FROM sources WHERE id=?", (cur.lastrowid,)).fetchone()
-    return row_to_dict(row)
+    sync = save_sources_to_github("Add RSS source")
+    data = row_to_dict(row)
+    data["github_sync"] = sync
+    return data
 
 
 @app.patch("/api/sources/{source_id}")
@@ -485,7 +690,29 @@ def update_source(source_id: int, payload: SourcePatch):
         row = conn.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Không tìm thấy nguồn")
-    return row_to_dict(row)
+    sync = save_sources_to_github("Update RSS source")
+    data = row_to_dict(row)
+    data["github_sync"] = sync
+    return data
+
+
+class ReorderIn(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/sources/reorder")
+def reorder_sources(payload: ReorderIn):
+    init_db()
+    ids = [int(x) for x in payload.ids if int(x) > 0]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Danh sách sắp xếp trống")
+    base = len(ids) * 10
+    with db() as conn:
+        for idx, source_id in enumerate(ids):
+            conn.execute("UPDATE sources SET priority=? WHERE id=?", (base - idx * 10, source_id))
+        rows = conn.execute("SELECT * FROM sources ORDER BY priority DESC, name ASC").fetchall()
+    sync = save_sources_to_github("Reorder RSS sources")
+    return {"ok": True, "items": [row_to_dict(r) for r in rows], "github_sync": sync}
 
 
 @app.delete("/api/sources/{source_id}")
@@ -493,7 +720,8 @@ def delete_source(source_id: int):
     init_db()
     with db() as conn:
         conn.execute("DELETE FROM sources WHERE id=?", (source_id,))
-    return {"ok": True}
+    sync = save_sources_to_github("Delete RSS source")
+    return {"ok": True, "github_sync": sync}
 
 
 @app.post("/api/fetch")
