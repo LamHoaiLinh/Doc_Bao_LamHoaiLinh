@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:33:14+00:00",
+  "updated_at": "2026-06-16T09:33:16+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -68,18 +68,18 @@
       "priority": 60
     },
     {
-      "name": "BBC - World",
-      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
-      "category": "World",
-      "language": "en",
-      "enabled": true,
-      "priority": 50
-    },
-    {
       "name": "Lao Động - Tin mới",
       "url": "https://laodong.vn/rss/home.rss",
       "category": "Tin mới",
       "language": "vi",
+      "enabled": true,
+      "priority": 50
+    },
+    {
+      "name": "BBC - World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "category": "World",
+      "language": "en",
       "enabled": true,
       "priority": 40
     },
