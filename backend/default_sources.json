@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:45:17+00:00",
+  "updated_at": "2026-06-16T09:45:29+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -127,7 +127,7 @@
       "name": "CafeBiz - Chứng Khoán",
       "url": "https://cafebiz.vn/rss/chung-khoan.rss",
       "category": "Chứng Khoán",
-      "language": "",
+      "language": "vi",
       "enabled": true,
       "priority": 5
     },
