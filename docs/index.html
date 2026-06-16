@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>News Radar Pro</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="appShell" class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Mobile News Radar</div>
+        <h1>News Radar Pro</h1>
+      </div>
+      <button id="btnRefresh" class="icon-btn" title="Quét tin mới">↻</button>
+    </header>
+
+    <nav class="tabs" aria-label="Điều hướng chính">
+      <button class="tab active" data-tab="feed">Tin mới</button>
+      <button class="tab" data-tab="saved">Đã lưu</button>
+      <button class="tab" data-tab="sources">Nguồn báo</button>
+      <button class="tab" data-tab="settings">Cài đặt</button>
+    </nav>
+
+    <main>
+      <section id="feed" class="panel active">
+        <div class="toolbar sticky-toolbar">
+          <input id="searchInput" class="input" placeholder="Tìm tiêu đề, nguồn, chủ đề..." />
+          <select id="sourceFilter" class="input"></select>
+          <label class="checkline"><input id="unreadOnly" type="checkbox" /> Chưa đọc</label>
+        </div>
+        <div class="status-row">
+          <span id="feedStatus">Sẵn sàng.</span>
+          <span id="pageInfo"></span>
+        </div>
+        <div id="articleList" class="article-list"></div>
+        <div class="pager">
+          <button id="prevPage" class="btn secondary">← Trang trước</button>
+          <button id="nextPage" class="btn">Trang sau →</button>
+        </div>
+      </section>
+
+      <section id="saved" class="panel">
+        <div class="section-title">Tin đã lưu</div>
+        <div id="savedList" class="article-list"></div>
+      </section>
+
+      <section id="sources" class="panel">
+        <div class="section-title">Thư viện nguồn báo</div>
+        <form id="sourceForm" class="source-form">
+          <input id="sourceName" class="input" placeholder="Tên nguồn, ví dụ: Reuters World" required />
+          <input id="sourceUrl" class="input" placeholder="RSS URL hoặc feed URL" required />
+          <input id="sourceCategory" class="input" placeholder="Nhóm: Việt Nam / World / AI / Finance" />
+          <input id="sourceLanguage" class="input" placeholder="Ngôn ngữ: vi / en / zh / ja..." />
+          <button class="btn" type="submit">Thêm nguồn</button>
+        </form>
+        <div id="sourceList" class="source-list"></div>
+      </section>
+
+      <section id="settings" class="panel">
+        <div class="section-title">Cài đặt giao diện đọc</div>
+        <div class="settings-grid">
+          <label>Cỡ chữ
+            <input id="fontSize" type="range" min="15" max="24" step="1" />
+          </label>
+          <label>Khoảng cách dòng
+            <input id="lineHeight" type="range" min="1.45" max="2" step="0.05" />
+          </label>
+          <label>Màu chữ
+            <input id="textColor" type="color" />
+          </label>
+          <label>Màu nền
+            <input id="bgColor" type="color" />
+          </label>
+          <label>Ảnh trong feed
+            <select id="imageMode" class="input">
+              <option value="large">Ảnh lớn</option>
+              <option value="small">Ảnh nhỏ</option>
+              <option value="hide">Ẩn ảnh</option>
+            </select>
+          </label>
+          <label>Kiểu chữ
+            <select id="fontFamily" class="input">
+              <option value="system">Hiện đại</option>
+              <option value="serif">Serif đọc báo</option>
+              <option value="mono">Mono học ngoại ngữ</option>
+            </select>
+          </label>
+        </div>
+        <button id="resetSettings" class="btn secondary">Khôi phục mặc định</button>
+        <div class="note-box">
+          Cài đặt này lưu trên điện thoại/máy đang dùng. Bài báo giữ nguyên ngôn ngữ gốc; AI chỉ tóm tắt khi anh bấm nút tóm tắt.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <aside id="reader" class="reader hidden" aria-live="polite">
+    <div class="reader-bar">
+      <button id="closeReader" class="icon-btn">×</button>
+      <div class="reader-nav">
+        <button id="prevArticle" class="mini-btn">← Bài trước</button>
+        <button id="nextArticle" class="mini-btn">Bài sau →</button>
+      </div>
+    </div>
+    <article class="reader-card">
+      <div id="readerMeta" class="reader-meta"></div>
+      <h2 id="readerTitle"></h2>
+      <img id="readerImage" class="reader-image" alt="" />
+      <div class="reader-actions">
+        <button id="readerOpenOriginal" class="btn secondary">Mở báo gốc</button>
+        <button id="readerSave" class="btn secondary">Lưu</button>
+        <button id="readerSummary" class="btn">Tóm tắt</button>
+        <select id="summaryStyle" class="input compact">
+          <option value="normal">Tóm tắt thường</option>
+          <option value="5w1h">5W1H</option>
+          <option value="language_learning">Học ngoại ngữ</option>
+        </select>
+      </div>
+      <section id="summaryBox" class="summary-box hidden"></section>
+      <section id="readerContent" class="reader-content"></section>
+    </article>
+  </aside>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

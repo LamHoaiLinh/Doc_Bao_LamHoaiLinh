@@ -1,0 +1,9 @@
+{
+  "name": "News Radar Pro",
+  "short_name": "NewsRadar",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#111827",
+  "icons": []
+}

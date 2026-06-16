@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: news-radar-pro-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DB_PATH
+        value: /var/data/news.db
+      - key: CORS_ORIGINS
+        value: '*'
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+    disk:
+      name: news-radar-data
+      mountPath: /var/data
+      sizeGB: 1
+
+cronJobs:
+  - name: news-radar-fetch-news
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python call_fetch_endpoint.py
+    schedule: "*/30 * * * *"
+    envVars:
+      - key: NEWS_API_BASE
+        value: https://DAN-LINK-RENDER-WEB-SERVICE-O-DAY
