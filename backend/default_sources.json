@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:35:05+00:00",
+  "updated_at": "2026-06-16T09:35:11+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -76,16 +76,16 @@
       "priority": 70
     },
     {
-      "name": "Người Lao Động - Tin mới",
-      "url": "https://nld.com.vn/rss/home.rss",
+      "name": "Lao Động - Tin mới",
+      "url": "https://laodong.vn/rss/home.rss",
       "category": "Tin mới",
       "language": "vi",
       "enabled": true,
       "priority": 60
     },
     {
-      "name": "Lao Động - Tin mới",
-      "url": "https://laodong.vn/rss/home.rss",
+      "name": "Người Lao Động - Tin mới",
+      "url": "https://nld.com.vn/rss/home.rss",
       "category": "Tin mới",
       "language": "vi",
       "enabled": true,
