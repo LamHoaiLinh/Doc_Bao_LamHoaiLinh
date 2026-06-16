@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:37:52+00:00",
+  "updated_at": "2026-06-16T09:42:21+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -122,6 +122,14 @@
       "language": "en",
       "enabled": true,
       "priority": 10
+    },
+    {
+      "name": "Vneconomy - Doanh Nghiệp",
+      "url": "https://vneconomy.vn/nhip-cau-doanh-nghiep.rss",
+      "category": "Doanh Nghiệp",
+      "language": "vi",
+      "enabled": true,
+      "priority": 5
     },
     {
       "name": "Vneconomy - Tin mới",
