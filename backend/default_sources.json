@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:30:56+00:00",
+  "updated_at": "2026-06-16T09:31:03+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -68,18 +68,18 @@
       "priority": 40
     },
     {
-      "name": "The Guardian - World",
-      "url": "https://www.theguardian.com/world/rss",
-      "category": "World",
-      "language": "en",
-      "enabled": true,
-      "priority": 30
-    },
-    {
       "name": "Vietnamnet - Đời Sống",
       "url": "https://infonet.vietnamnet.vn/rss/doi-song.rss",
       "category": "Đời Sống",
       "language": "vi",
+      "enabled": true,
+      "priority": 30
+    },
+    {
+      "name": "The Guardian - World",
+      "url": "https://www.theguardian.com/world/rss",
+      "category": "World",
+      "language": "en",
       "enabled": true,
       "priority": 20
     },
