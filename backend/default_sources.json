@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:33:01+00:00",
+  "updated_at": "2026-06-16T09:33:07+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -9,7 +9,7 @@
       "category": "Việt Nam",
       "language": "vi",
       "enabled": true,
-      "priority": 120
+      "priority": 130
     },
     {
       "name": "VnExpress - Thời sự",
@@ -17,7 +17,7 @@
       "category": "Việt Nam",
       "language": "vi",
       "enabled": true,
-      "priority": 110
+      "priority": 120
     },
     {
       "name": "VnExpress - Thế giới",
@@ -25,7 +25,7 @@
       "category": "Thế giới",
       "language": "vi",
       "enabled": true,
-      "priority": 100
+      "priority": 110
     },
     {
       "name": "VnExpress - Kinh doanh",
@@ -33,7 +33,7 @@
       "category": "Kinh tế",
       "language": "vi",
       "enabled": true,
-      "priority": 90
+      "priority": 100
     },
     {
       "name": "Tuổi Trẻ - Tin mới",
@@ -41,7 +41,7 @@
       "category": "Việt Nam",
       "language": "vi",
       "enabled": true,
-      "priority": 80
+      "priority": 90
     },
     {
       "name": "Thanh Niên - Trang chủ",
@@ -49,7 +49,7 @@
       "category": "Việt Nam",
       "language": "vi",
       "enabled": true,
-      "priority": 70
+      "priority": 80
     },
     {
       "name": "Dân Trí - Xã hội",
@@ -57,7 +57,7 @@
       "category": "Việt Nam",
       "language": "vi",
       "enabled": true,
-      "priority": 60
+      "priority": 70
     },
     {
       "name": "Vietnamnet - Đời Sống",
@@ -65,7 +65,7 @@
       "category": "Đời Sống",
       "language": "vi",
       "enabled": true,
-      "priority": 50
+      "priority": 60
     },
     {
       "name": "BBC - World",
@@ -73,7 +73,7 @@
       "category": "World",
       "language": "en",
       "enabled": true,
-      "priority": 40
+      "priority": 50
     },
     {
       "name": "Vietnamnet - Thị Trường",
@@ -81,13 +81,21 @@
       "category": "Thị Trường",
       "language": "",
       "enabled": true,
-      "priority": 30
+      "priority": 40
     },
     {
       "name": "The Guardian - World",
       "url": "https://www.theguardian.com/world/rss",
       "category": "World",
       "language": "en",
+      "enabled": true,
+      "priority": 30
+    },
+    {
+      "name": "Lao Động - Tin mới",
+      "url": "https://laodong.vn/rss/home.rss",
+      "category": "Tin mới",
+      "language": "vi",
       "enabled": true,
       "priority": 20
     },
@@ -98,14 +106,6 @@
       "language": "en",
       "enabled": true,
       "priority": 10
-    },
-    {
-      "name": "Lao Động - Tin mới",
-      "url": "https://laodong.vn/rss/home.rss",
-      "category": "Tin mới",
-      "language": "vi",
-      "enabled": true,
-      "priority": 5
     }
   ]
 }
