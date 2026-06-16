@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:32:04+00:00",
+  "updated_at": "2026-06-16T09:32:06+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -68,18 +68,18 @@
       "priority": 50
     },
     {
-      "name": "BBC - World",
-      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
-      "category": "World",
-      "language": "en",
-      "enabled": true,
-      "priority": 40
-    },
-    {
       "name": "Vietnamnet - Thị Trường",
       "url": "https://infonet.vietnamnet.vn/rss/thi-truong.rss",
       "category": "Thị Trường",
       "language": "",
+      "enabled": true,
+      "priority": 40
+    },
+    {
+      "name": "BBC - World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "category": "World",
+      "language": "en",
       "enabled": true,
       "priority": 30
     },
