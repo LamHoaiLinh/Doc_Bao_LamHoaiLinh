@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-16T09:33:07+00:00",
+  "updated_at": "2026-06-16T09:33:10+00:00",
   "note": "Nguồn RSS do News Radar Pro quản lý. Sửa tốt nhất trong app để tránh sai cấu trúc.",
   "sources": [
     {
@@ -84,18 +84,18 @@
       "priority": 40
     },
     {
-      "name": "The Guardian - World",
-      "url": "https://www.theguardian.com/world/rss",
-      "category": "World",
-      "language": "en",
-      "enabled": true,
-      "priority": 30
-    },
-    {
       "name": "Lao Động - Tin mới",
       "url": "https://laodong.vn/rss/home.rss",
       "category": "Tin mới",
       "language": "vi",
+      "enabled": true,
+      "priority": 30
+    },
+    {
+      "name": "The Guardian - World",
+      "url": "https://www.theguardian.com/world/rss",
+      "category": "World",
+      "language": "en",
       "enabled": true,
       "priority": 20
     },
